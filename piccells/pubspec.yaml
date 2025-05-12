@@ -1,0 +1,44 @@
+name: piccells
+description: "A plug-and-play for puzzles"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.17.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  #mic_stream:
+  #  path: packages/mic_stream
+  flutter_foreground_task: ^9.1.0
+  tflite_flutter: ^0.11.0
+  #tflite_flutter_helper: ^0.2.1
+  async: ^2.12.0
+  vector_math: ^2.1.4
+  material_color_utilities: ^0.11.1
+
+
+  camera: ^0.11.1
+  permission_handler: ^12.0.0+1
+  # record: ^5.0.0
+  #path_provider: ^2.1.2
+dependency_overrides:
+ # camera: ^0.10.5+2
+  permission_handler_android: ^13.0.1
+  vector_math: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/yamnet.tflite
+    - assets/puzzle_image3.png
+
+
