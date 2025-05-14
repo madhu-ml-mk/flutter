@@ -10,6 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  image_picker: ^1.0.4  # or latest
+  image_picker_web: ^3.0.0 # for web support
+  #flutter/foundation.dart # for kIsWeb
   #mic_stream:
   #  path: packages/mic_stream
   flutter_foreground_task: ^9.1.0
@@ -39,6 +42,11 @@ flutter:
 
   assets:
     - assets/yamnet.tflite
-    - assets/puzzle_image3.png
+    - assets/images/png/
+    - assets/images/webp/
+    - assets/images/png/puzzle_image1.png
+    - assets/images/png/puzzle_image2.png
+    - assets/images/webp/puzzle_image1.webp
+    - assets/images/webp/puzzle_image2.webp
 
 

@@ -1,57 +1,77 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:piccells/screens/image_picker_screen.dart';
 
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Jigsaw Puzzle',
-      theme: ThemeData(primarySwatch: Colors.teal),
-      home: const IntermediatePuzzleScreen(),
-    );
-  }
-}
 
 class IntermediatePuzzleScreen extends StatefulWidget {
-  const IntermediatePuzzleScreen({super.key});
+  final String? imagePath;
+  const IntermediatePuzzleScreen({Key? key, this.imagePath}) : super(key: key);
 
   @override
-  State<IntermediatePuzzleScreen> createState() => _IntermediatePuzzleScreenState();
+  _IntermediatePuzzleScreenState createState() => _IntermediatePuzzleScreenState();
 }
 
 class _IntermediatePuzzleScreenState extends State<IntermediatePuzzleScreen> {
-  final int gridSize = 3;
-  final double tileSize = 100;
+  final int gridSize = 4;
+  double tileSize = 100;
   late List<Offset> currentPositions;
   late List<Offset> correctPositions;
   late List<bool> isTilePlaced;
   late List<int> tileOrder;
   bool puzzleSolved = false;
   ui.Image? fullImage;
+  File? selectedImageFile;
+  bool isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadImage();
-  }
-
-  Future<void> _loadImage() async {
-    final data = await rootBundle.load('assets/puzzle_image3.png');
-    final image = await decodeImageFromList(data.buffer.asUint8List());
-
-    setState(() {
-      fullImage = image;
-      _initializePuzzle();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.imagePath != null) {
+        _loadImageFromAsset(widget.imagePath!);
+      }
     });
   }
 
+  Future<void> _loadImageFromAsset(String path) async {
+    setState(() => isLoading = true);
+    final data = await rootBundle.load(path);
+    final image = await decodeImageFromList(data.buffer.asUint8List());
+    setState(() {
+      fullImage = image;
+      selectedImageFile = null;
+      isLoading = false;
+    });
+    _initializePuzzle();
+  }
+
+  Future<void> _loadImageFromFile(File imageFile) async {
+    setState(() => isLoading = true);
+    try {
+      final imageData = await imageFile.readAsBytes();
+      final image = await decodeImageFromList(imageData);
+      setState(() {
+        fullImage = image;
+        selectedImageFile = imageFile;
+        isLoading = false;
+      });
+      _initializePuzzle();
+    } catch (e) {
+      debugPrint('Error loading image: $e');
+      setState(() => isLoading = false);
+    }
+  }
+
   void _initializePuzzle() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxTileSize = min((screenWidth - 40) / gridSize, (screenHeight - 300) / gridSize);
+    tileSize = maxTileSize;
+
     currentPositions = [];
     correctPositions = [];
     isTilePlaced = List.generate(gridSize * gridSize, (index) => false);
@@ -65,12 +85,18 @@ class _IntermediatePuzzleScreenState extends State<IntermediatePuzzleScreen> {
     tileOrder = List.generate(gridSize * gridSize, (index) => index);
     tileOrder.shuffle();
 
+    final double heapTop = 100 + tileSize * gridSize + 30;
+    final double heapHeight = MediaQuery.of(context).size.height - heapTop - tileSize;
+    final double heapWidth = MediaQuery.of(context).size.width - tileSize;
     final random = Random();
+
     for (int i = 0; i < tileOrder.length; i++) {
-      double x = random.nextDouble() * (tileSize * gridSize);
-      double y = tileSize * gridSize + random.nextDouble() * 100 + 100;
+      double x = random.nextDouble() * heapWidth;
+      double y = heapTop + random.nextDouble() * max(50, heapHeight);
       currentPositions.add(Offset(x, y));
     }
+
+    puzzleSolved = false;
   }
 
   void _handleDragEnd(int index, DraggableDetails details) {
@@ -106,11 +132,26 @@ class _IntermediatePuzzleScreenState extends State<IntermediatePuzzleScreen> {
   }
 
   void _resetPuzzle() {
-    setState(() {
-      puzzleSolved = false;
-      _initializePuzzle();
-    });
+    if (selectedImageFile != null) {
+      _loadImageFromFile(selectedImageFile!);
+    } else if (widget.imagePath != null) {
+      _loadImageFromAsset(widget.imagePath!);
+    }
   }
+
+Future<void> _changeImage() async {
+  final selectedImagePath = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => ImagePickerScreen(),
+    ),
+  );
+
+  if (selectedImagePath != null) {
+    _loadImageFromAsset(selectedImagePath);
+  }
+}
+
 
   Widget _buildDraggableTile(int index) {
     return Positioned(
@@ -163,54 +204,60 @@ class _IntermediatePuzzleScreenState extends State<IntermediatePuzzleScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Jigsaw Puzzle'),
+        title: const Text('Intermediate Puzzle'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.image),
+            onPressed: _changeImage,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _resetPuzzle,
-          )
+          ),
         ],
       ),
-      body: Stack(
-        children: [
-          Positioned(
-            top: 100,
-            left: gridLeft,
-            child: SizedBox(
-              width: gridWidth,
-              height: gridWidth,
-              child: Stack(
-                children: List.generate(
-                  gridSize * gridSize,
-                  (index) => Positioned(
-                    left: correctPositions[index].dx,
-                    top: correctPositions[index].dy,
-                    child: Container(
-                      width: tileSize,
-                      height: tileSize,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                Positioned(
+                  top: 100,
+                  left: gridLeft,
+                  child: SizedBox(
+                    width: gridWidth,
+                    height: gridWidth,
+                    child: Stack(
+                      children: List.generate(
+                        gridSize * gridSize,
+                        (index) => Positioned(
+                          left: correctPositions[index].dx,
+                          top: correctPositions[index].dy,
+                          child: Container(
+                            width: tileSize,
+                            height: tileSize,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+                ...List.generate(tileOrder.length, (index) => _buildDraggableTile(index)),
+                if (puzzleSolved)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      color: Colors.white70,
+                      child: const Text(
+                        'Puzzle Solved!',
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ),
-          ...List.generate(tileOrder.length, (index) => _buildDraggableTile(index)),
-          if (puzzleSolved)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                color: Colors.white70,
-                child: const Text(
-                  'Puzzle Solved! ??',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

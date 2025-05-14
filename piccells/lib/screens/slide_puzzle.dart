@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:piccells/screens/image_picker_screen.dart';
 
 class SlidePuzzleScreen extends StatefulWidget {
+  final String imagePath;
+
+  const SlidePuzzleScreen({Key? key, required this.imagePath}) : super(key: key);
+
   @override
   _SlidePuzzleScreenState createState() => _SlidePuzzleScreenState();
 }
 
 class _SlidePuzzleScreenState extends State<SlidePuzzleScreen> {
-  final int gridSize = 3;
+  final int gridSize = 3;  // 3x3 grid for beginner puzzle
   late double tileSize;
   late List<int> tiles;
   ui.Image? fullImage;
@@ -20,20 +26,44 @@ class _SlidePuzzleScreenState extends State<SlidePuzzleScreen> {
     _loadImage();
   }
 
+  // Initialize the tiles in the grid
   void _initializeTiles() {
     tiles = List.generate(gridSize * gridSize, (i) => i);
     tiles.shuffle();
   }
 
-  Future<void> _loadImage() async {
-    final data = await rootBundle.load('assets/puzzle_image3.png');
-    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-    final frame = await codec.getNextFrame();
+  // Load image from assets or from user selection
+  Future<void> _loadImage({XFile? imageFile}) async {
+    ui.Image? image;
+    if (imageFile != null) {
+      final data = await imageFile.readAsBytes();
+      final codec = await ui.instantiateImageCodec(data);
+      final frame = await codec.getNextFrame();
+      image = frame.image;
+    } else {
+      final data = await rootBundle.load(widget.imagePath);
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      image = frame.image;
+    }
     setState(() {
-      fullImage = frame.image;
+      fullImage = image;
     });
   }
+Future<void> _loadImageFromAsset(String path) async {
+  setState(() => fullImage = null); // Clear previous image before loading new one
 
+  final data = await rootBundle.load(path);
+  final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+  final frame = await codec.getNextFrame();
+
+  setState(() {
+    fullImage = frame.image;
+  });
+}
+
+
+  // Swap the tiles in the grid
   void _swapTiles(int fromIndex, int toIndex) {
     setState(() {
       final temp = tiles[fromIndex];
@@ -41,6 +71,7 @@ class _SlidePuzzleScreenState extends State<SlidePuzzleScreen> {
       tiles[toIndex] = temp;
     });
 
+    // Check if puzzle is solved
     if (List.generate(gridSize * gridSize, (i) => i)
         .every((i) => tiles[i] == i)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -49,12 +80,37 @@ class _SlidePuzzleScreenState extends State<SlidePuzzleScreen> {
     }
   }
 
+  // Open the image picker to select a new image
+
+  Future<void> _changeImage() async {
+    final selectedImagePath = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImagePickerScreen(),
+      ),
+    );
+
+    if (selectedImagePath != null) {
+      setState(() {
+        fullImage = null; // Clear current image before loading a new one
+      });
+      _loadImageFromAsset(selectedImagePath);
+    }
+  }
+
+
+  Future<void> _selectImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      _loadImage(imageFile: pickedFile);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height -
-        kToolbarHeight -
-        MediaQuery.of(context).padding.top;
+    final screenHeight = MediaQuery.of(context).size.height - kToolbarHeight - MediaQuery.of(context).padding.top;
     final boardSize = screenWidth < screenHeight ? screenWidth : screenHeight;
 
     tileSize = boardSize / gridSize;
@@ -63,26 +119,47 @@ class _SlidePuzzleScreenState extends State<SlidePuzzleScreen> {
       appBar: AppBar(title: Text("Slide Puzzle")),
       body: Center(
         child: fullImage == null
-            ? CircularProgressIndicator()
-            : Container(
-                width: tileSize * gridSize,
-                height: tileSize * gridSize,
-                child: GridView.builder(
-                  physics: NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: gridSize,
-                    childAspectRatio: 1.0,
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _selectImage,
+                    child: Text("Select Image"),
                   ),
-                  itemCount: gridSize * gridSize,
-                  itemBuilder: (context, index) {
-                    return _buildDraggableTile(index);
-                  },
-                ),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: _changeImage,
+                    child: Text("Change Image"),
+                  ),
+                  SizedBox(height: 20),
+                  Container(
+                    width: tileSize * gridSize,
+                    height: tileSize * gridSize,
+                    child: GridView.builder(
+                      physics: NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: gridSize,
+                        childAspectRatio: 1.0,
+                      ),
+                      itemCount: gridSize * gridSize,
+                      itemBuilder: (context, index) {
+                        return _buildDraggableTile(index);
+                      },
+                    ),
+                  ),
+                ],
               ),
       ),
     );
   }
 
+  // Build draggable tile widget
   Widget _buildDraggableTile(int index) {
     final tileIndex = tiles[index];
     final row = tileIndex ~/ gridSize;
@@ -106,6 +183,7 @@ class _SlidePuzzleScreenState extends State<SlidePuzzleScreen> {
     );
   }
 
+  // Build individual tile widget
   Widget _buildTile(int row, int col) {
     if (fullImage == null) return Container();
 
